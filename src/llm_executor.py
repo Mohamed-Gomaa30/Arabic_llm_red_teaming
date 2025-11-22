@@ -10,13 +10,13 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 import pandas as pd
 from configs.config_manager import ConfigManager
 
-
 from dotenv import load_dotenv
 
-dotenv_path = Path(__file__).parent / ".env" # root/.env 
+dotenv_path = Path(__file__).parent / ".env"
 load_dotenv(dotenv_path)
 
 HF_Token = os.environ.get("HUGGINGFACE_HUB_TOKEN")
+
 Gemini_Token = os.environ.get("GEMINI_API_KEY")
 
 
@@ -34,9 +34,7 @@ class LLMExecutor:
     def _setup_models(self):
         """Initialize models - load HuggingFace models directly"""
         try:
-            # Setup Gemini
             if 'gemini' in self.model_config:
-                # api_key = os.getenv('GEMINI_API_KEY')
                 if Gemini_Token:
                     genai.configure(api_key=Gemini_Token)
                     self.models['gemini'] = genai.GenerativeModel(self.model_config['gemini']['model_name'])
@@ -44,7 +42,6 @@ class LLMExecutor:
                 else:
                     logger.warning("GEMINI_API_KEY not found")
             
-            # HuggingFace models will be loaded on first use
             logger.info("HuggingFace models will be loaded on first use")
                     
         except Exception as e:
@@ -53,21 +50,17 @@ class LLMExecutor:
     
     def _load_hf_model(self, model_name: str):
         """Load HuggingFace model"""
-        # FIX: Get model path from config, not hardcoded
         model_path = self.model_config[model_name]['model_name']
         
-        # FIX: Check if already loaded
         if model_name in self.models:
             return
             
         try:
             logger.info(f"Loading {model_name} from {model_path}...")
             
-            # Set device
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             print(f"Using device: {device}")
 
-            # FIX: Actually load the tokenizer
             self.tokenizers[model_name] = AutoTokenizer.from_pretrained(
                 model_path,
                 token=HF_Token, 
@@ -75,15 +68,13 @@ class LLMExecutor:
             )
             logger.info("Tokenizer Loaded ...")
 
-            # Add padding token if missing
             if self.tokenizers[model_name].pad_token is None:
                 self.tokenizers[model_name].pad_token = self.tokenizers[model_name].eos_token
 
-            # FIX: Load model with correct parameters
             self.models[model_name] = AutoModelForCausalLM.from_pretrained(
                 model_path,
                 token=HF_Token, 
-                dtype=torch.float16, 
+                dtype=torch.float32, #if self.model_config[model_name]["torch16"] else torch.float16,  
                 device_map="auto",
                 trust_remote_code=True,
             )
@@ -116,8 +107,6 @@ class LLMExecutor:
         """Query JAIS model"""
         try:
             self._load_hf_model('jais')
-            
-            # JAIS chat format
             formatted_prompt = f"<|user|>\n{prompt}\n<|assistant|>\n"
             
             inputs = self.tokenizers['jais'](formatted_prompt, return_tensors="pt")
@@ -147,7 +136,6 @@ class LLMExecutor:
         try:
             self._load_hf_model('acegpt')
             
-            # AceGPT chat format
             formatted_prompt = f"Human: {prompt}\n\nAssistant:"
             
             inputs = self.tokenizers['acegpt'](formatted_prompt, return_tensors="pt")
@@ -158,7 +146,7 @@ class LLMExecutor:
                     **inputs,
                     max_new_tokens=1000,
                     temperature=0.0,
-                    do_sample=True,
+                    do_sample=False,
                     eos_token_id=self.tokenizers['acegpt'].eos_token_id,
                     pad_token_id=self.tokenizers['acegpt'].eos_token_id
                 )
@@ -176,8 +164,9 @@ class LLMExecutor:
     def query_allam(self, prompt: str) -> str:
         """Query Allam model"""
         try:
+            print("111111111111111111---------------------------------------------------")
             self._load_hf_model('allam')
-            
+
             formatted_prompt = f"### Human: {prompt}\n### Assistant:"
             
             inputs = self.tokenizers['allam'](formatted_prompt, return_tensors="pt")
@@ -188,7 +177,7 @@ class LLMExecutor:
                     **inputs,
                     max_new_tokens=1000,
                     temperature=0.0,
-                    do_sample=True,
+                    do_sample=False,
                     eos_token_id=self.tokenizers['allam'].eos_token_id,
                     pad_token_id=self.tokenizers['allam'].eos_token_id
                 )
@@ -208,10 +197,12 @@ class LLMExecutor:
         if model == 'gemini':
             return self.query_gemini(prompt)
         elif model == 'jais':
+            print("---------------------------------------------------")
             return self.query_jais(prompt)
         elif model == 'acegpt':
             return self.query_acegpt(prompt)
         elif model == 'allam':
+            print("---------------------------------------------------")
             return self.query_allam(prompt)
         else:
             return f"ERROR: Model {model} not supported"
@@ -260,14 +251,13 @@ class LLMExecutor:
                         'q_type': row.get('Q-Type', ''),
                         'model': model,
                         'text_type': text_type,
-                        'prompt': prompt[:300],
+                        'prompt': prompt,
                         'response': response,
                         'prompt_full': prompt
                     }
                     
                     results.append(result)
                     
-                    # Small delay between requests
                     time.sleep(1)
         
         return pd.DataFrame(results)
