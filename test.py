@@ -48,7 +48,7 @@ app = modal.App("robostai-arabic-llm")
     image=image,
     gpu="A100-40GB",# for 7B models 
     # gpu="A100-80GB", # for 13B models  
-    timeout=1800*4,
+    timeout=1800,
     volumes={"/root/processed/":output_volume}, 
     secrets=[modal.Secret.from_dotenv(Path(__file__))]
 )
@@ -66,7 +66,7 @@ def evaluate(*arglist):
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", type=str, choices=['harmful', 'regional'], required=True)
     parser.add_argument("--models", type=str, nargs='+', default=['gemini', 'jais', 'acegpt', 'allam'])
-    parser.add_argument("--sample_size", type=int, default=-1)
+    parser.add_argument("--sample_size", type=int, default=5)
     args = parser.parse_args(args=arglist)
     
     print("=" * 60)
