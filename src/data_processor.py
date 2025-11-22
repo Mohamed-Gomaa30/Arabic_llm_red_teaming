@@ -12,7 +12,7 @@ load_dotenv(dotenv_path)
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
-print(GEMINI_API_KEY)
+# print(GEMINI_API_KEY)
 
 
 class DataProcessor:
@@ -168,6 +168,7 @@ class DataProcessor:
         
         output_path = os.path.join(output_dir, f'processed_{dataset_type}.csv')
         df.to_csv(output_path, index=False, encoding='utf-8')
+
         print(f"Data saved to: {output_path}")
         
         return df
