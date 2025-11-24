@@ -2,6 +2,7 @@
 import os
 import pandas as pd
 import logging
+import json
 from typing import Dict, List
 from src.data_processor import DataProcessor
 from src.llm_executor import LLMExecutor
@@ -15,7 +16,7 @@ class MultiFormatTester:
         self.config = config
         self.data_processor = DataProcessor(config)
         self.llm_executor = LLMExecutor(config)
-        self.safety_evaluator = SafetyEvaluator(config)
+        self.safety_evaluator = SafetyEvaluator(config, self.llm_executor)
         self.output_dir = config.get_data_config()['output_dir']
         
     def test_all_formats(self, models: List[str], dataset_name: str, 
@@ -64,38 +65,54 @@ class MultiFormatTester:
         }
     
     def _save_results_by_format(self, results: pd.DataFrame, dataset: str):
-        """Save results organized by text format"""
+        """Save results organized by LLM and dataset name"""
         formats = results['text_type'].unique()
-        
         for format_name in formats:
             format_results = results[results['text_type'] == format_name]
-            
-            # Create format directory
-            format_dir = os.path.join(self.output_dir, 'results', format_name)
-            os.makedirs(format_dir, exist_ok=True)
-            
-            # Save by model
             for model in format_results['model'].unique():
                 model_results = format_results[format_results['model'] == model]
-                filename = os.path.join(format_dir, f"{model}_{dataset}_results.csv")
+                # Create directory: results/llm_name/dataset_name/
+                save_dir = os.path.join(self.output_dir, 'results', model, dataset)
+                os.makedirs(save_dir, exist_ok=True)
+                filename = os.path.join(save_dir, f"{format_name}_results.csv")
                 model_results.to_csv(filename, index=False, encoding='utf-8')
-                logger.info(f"Saved {format_name} results for {model}: {len(model_results)} prompts")
+                logger.info(f"Saved {format_name} results for {model} in {dataset}: {len(model_results)} prompts")
 
+    def _convert_metrics_to_serializable(self, metrics: Dict) -> Dict:
+        """Convert numpy/pandas types to Python native types for JSON serialization"""
+        def convert_value(value):
+            if hasattr(value, 'item'):  # numpy/pandas types
+                return value.item()
+            elif isinstance(value, (int, float)):
+                return float(value) if isinstance(value, float) else int(value)
+            elif isinstance(value, dict):
+                return {k: convert_value(v) for k, v in value.items()}
+            elif isinstance(value, list):
+                return [convert_value(v) for v in value]
+            else:
+                return value
+        
+        return convert_value(metrics)
 
     def _generate_summary_report(self, metrics: Dict, dataset: str, model_name:str):
         """Generate summary report"""
-        import json
         from datetime import datetime
         
         report_dir = os.path.join(self.output_dir, 'summary_reports')
         os.makedirs(report_dir, exist_ok=True)
         
+        # Convert metrics to serializable format
+        serializable_metrics = self._convert_metrics_to_serializable(metrics)
+        
         report = {
             'dataset': dataset,
             'timestamp': datetime.now().isoformat(),
-            'metrics': metrics,
-            'key_findings': self._extract_key_findings(metrics)
+            'metrics': serializable_metrics,
         }
+        
+        # Ensure the metrics structure matches the user's request
+        # The serializable_metrics already contains 'overall', 'model_X', 'text_type_Y', and 'format_ranking'
+        # which aligns with the requested format.
         
         filename = os.path.join(report_dir, f"{model_name}_{dataset}_summary.json")
         with open(filename, 'w', encoding='utf-8') as f:
@@ -104,36 +121,9 @@ class MultiFormatTester:
         logger.info(f"Saved summary report to: {filename}")
         
         # print summary to console
-        self._print_console_summary(metrics, dataset)
+        self._print_console_summary(serializable_metrics, dataset)
         
         return report
-    
-    def _extract_key_findings(self, metrics: Dict) -> List[str]:
-        """Extract key findings from metrics"""
-        findings = []
-        
-        if 'format_ranking' in metrics:
-            ranking = metrics['format_ranking']
-            findings.append(f"Most effective jailbreak format: {ranking['most_effective']}")
-            findings.append(f"Least effective jailbreak format: {ranking['least_effective']}")
-        
-        # Find most vulnerable model
-        model_rates = {}
-        for key, value in metrics.items():
-            if key.startswith('model_'):
-                model_name = key.replace('model_', '')
-                model_rates[model_name] = value['jailbreak_success_rate']
-        
-        if model_rates:
-            most_vulnerable = max(model_rates, key=model_rates.get)
-            most_secure = min(model_rates, key=model_rates.get)
-            findings.append(f"Most vulnerable model: {most_vulnerable}")
-            findings.append(f"Most secure model: {most_secure}")
-        
-        overall_rate = metrics.get('overall', {}).get('jailbreak_success_rate', 0)
-        findings.append(f"Overall jailbreak success rate: {overall_rate}%")
-        
-        return findings
     
     def _print_console_summary(self, metrics: Dict, dataset: str):
         """Print summary to console"""
@@ -154,6 +144,6 @@ class MultiFormatTester:
         
         print(f"\nModel Performance:")
         for key, value in metrics.items():
-            if key.startswith('model_'):
+            if key.startswith('model_') and 'ranking' not in key:
                 model_name = key.replace('model_', '')
                 print(f"  {model_name}: {value['jailbreak_success_rate']}%")

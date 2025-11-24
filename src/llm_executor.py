@@ -9,14 +9,12 @@ from pathlib import Path
 from transformers import AutoTokenizer, AutoModelForCausalLM
 import pandas as pd
 from configs.config_manager import ConfigManager
-
 from dotenv import load_dotenv
 
 dotenv_path = Path(__file__).parent / ".env"
 load_dotenv(dotenv_path)
 
 HF_Token = os.environ.get("HUGGINGFACE_HUB_TOKEN")
-
 Gemini_Token = os.environ.get("GEMINI_API_KEY")
 
 
@@ -30,14 +28,32 @@ class LLMExecutor:
         self.models = {}
         self.tokenizers = {}
         self._setup_models()
-        
+
     def _setup_models(self):
         """Initialize models - load HuggingFace models directly"""
         try:
             if 'gemini' in self.model_config:
                 if Gemini_Token:
                     genai.configure(api_key=Gemini_Token)
-                    self.models['gemini'] = genai.GenerativeModel(self.model_config['gemini']['model_name'])
+                    safety_settings = [
+                        {
+                            "category": "HARM_CATEGORY_HARASSMENT",
+                            "threshold": "BLOCK_NONE"
+                        },
+                        {
+                            "category": "HARM_CATEGORY_HATE_SPEECH",
+                            "threshold": "BLOCK_NONE"
+                        },
+                        {
+                            "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                            "threshold": "BLOCK_NONE"
+                        },
+                        {
+                            "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+                            "threshold": "BLOCK_NONE"
+                        }
+                    ]
+                    self.models['gemini'] = genai.GenerativeModel("gemini-2.5-flash-lite", safety_settings=safety_settings)
                     logger.info("Gemini client initialized")
                 else:
                     logger.warning("GEMINI_API_KEY not found")
@@ -53,8 +69,7 @@ class LLMExecutor:
         model_path = self.model_config[model_name]['model_name']
         
         if model_name in self.models:
-            return
-            
+            return          
         try:
             logger.info(f"Loading {model_name} from {model_path}...")
             
@@ -74,14 +89,14 @@ class LLMExecutor:
             self.models[model_name] = AutoModelForCausalLM.from_pretrained(
                 model_path,
                 token=HF_Token, 
-                dtype=torch.float32, #if self.model_config[model_name]["torch16"] else torch.float16,  
+                dtype=torch.float32, # if torch.cuda.is_available() else torch.float32,
                 device_map="auto",
                 trust_remote_code=True,
+                revision="main" # Explicitly set revision to avoid warning if possible, or just ignore
             )
+            self.models[model_name].eval()
             logger.info("Model Loaded ...")
 
-
-            
             logger.info(f"{model_name} loaded successfully on device: {self.models[model_name].device}")
             
         except Exception as e:
@@ -91,14 +106,48 @@ class LLMExecutor:
     def query_gemini(self, prompt: str) -> str:
         """Query Gemini model"""
         try:
+            gemini_config = self.model_config.get('gemini', {})
+            temperature = gemini_config.get('temperature', 0.0)
+            max_tokens = gemini_config.get('max_tokens', 1000)
+            
+            safety_settings = [
+                {
+                    "category": "HARM_CATEGORY_HARASSMENT",
+                    "threshold": "BLOCK_NONE"
+                },
+                {
+                    "category": "HARM_CATEGORY_HATE_SPEECH",
+                    "threshold": "BLOCK_NONE"
+                },
+                {
+                    "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                    "threshold": "BLOCK_NONE"
+                },
+                {
+                    "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+                    "threshold": "BLOCK_NONE"
+                }
+            ]
+
             response = self.models['gemini'].generate_content(
-                prompt,
+                [
+                    {"role": "user", "parts": [prompt]}
+                ],
                 generation_config=genai.types.GenerationConfig(
-                    temperature=0.0,
-                    max_output_tokens=1000
-                )
+                    temperature=temperature,
+                    max_output_tokens=max_tokens
+                ),
+                safety_settings=safety_settings
             )
-            return response.text
+
+            try:
+                return response.text
+            except ValueError:
+                finish_reason = None
+                if hasattr(response, "candidates") and response.candidates:
+                    finish_reason = getattr(response.candidates[0], "finish_reason", None)
+                logger.warning(f"Gemini API: No text returned. finish_reason={finish_reason}")
+                return f"ERROR: Gemini did not return text. finish_reason={finish_reason}"
         except Exception as e:
             logger.error(f"Gemini API error: {e}")
             return f"ERROR: {str(e)}"
@@ -109,12 +158,13 @@ class LLMExecutor:
             self._load_hf_model('jais')
             formatted_prompt = f"<|user|>\n{prompt}\n<|assistant|>\n"
             
-            inputs = self.tokenizers['jais'](formatted_prompt, return_tensors="pt")
-            inputs = {k: v.to(self.models['jais'].device) for k, v in inputs.items()}
+            inputs = self.tokenizers['jais'](formatted_prompt, return_tensors="pt").input_ids
+            inputs = input_ids.to(device)
+            # inputs = {k: v.to(self.models['jais'].device) for k, v in inputs.items()}
             
             with torch.no_grad():
                 outputs = self.models['jais'].generate(
-                    **inputs,
+                    inputs,
                     max_new_tokens=1000,
                     temperature=0.0,
                     do_sample=False,
@@ -164,7 +214,6 @@ class LLMExecutor:
     def query_allam(self, prompt: str) -> str:
         """Query Allam model"""
         try:
-            print("111111111111111111---------------------------------------------------")
             self._load_hf_model('allam')
 
             formatted_prompt = f"### Human: {prompt}\n### Assistant:"
@@ -197,12 +246,11 @@ class LLMExecutor:
         if model == 'gemini':
             return self.query_gemini(prompt)
         elif model == 'jais':
-            print("---------------------------------------------------")
+            # print("---------------------------------------------------")
             return self.query_jais(prompt)
         elif model == 'acegpt':
             return self.query_acegpt(prompt)
         elif model == 'allam':
-            print("---------------------------------------------------")
             return self.query_allam(prompt)
         else:
             return f"ERROR: Model {model} not supported"
@@ -257,7 +305,9 @@ class LLMExecutor:
                     }
                     
                     results.append(result)
-                    
-                    time.sleep(1)
+
+                    # Time delay to handle the gemini response rate 
+                    time.sleep(2)
+
         
         return pd.DataFrame(results)

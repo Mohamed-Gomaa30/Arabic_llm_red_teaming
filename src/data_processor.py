@@ -5,14 +5,12 @@ from configs.config_manager import ConfigManager
 from pathlib import Path
 from dotenv import load_dotenv
 import mishkal.tashkeel
-
+import logging
 dotenv_path = Path(__file__).parent.parent / ".env" 
 load_dotenv(dotenv_path)
 
 
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-
-# print(GEMINI_API_KEY)
+logger = logging.getLogger(__name__)
 
 
 class DataProcessor:
