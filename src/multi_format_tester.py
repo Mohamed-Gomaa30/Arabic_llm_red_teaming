@@ -25,7 +25,6 @@ class MultiFormatTester:
         logger.info(f"Starting multi-format testing for {dataset_name}")
         
         self.model_name = models[0]
-        # Load processed data (your preprocessing already created this)
         processed_path = os.path.join(self.output_dir, f'processed_{dataset_name}.csv')
         
         if os.path.exists(processed_path):
@@ -35,28 +34,23 @@ class MultiFormatTester:
             logger.info(f"Processing data for: {dataset_name}")
             dataset = self.data_processor.process_data(dataset_name)
         
-        # Sample data if needed
         if sample_size and sample_size < len(dataset):
             dataset = dataset.sample(sample_size, random_state=42)
             logger.info(f"Sampled {sample_size} prompts from dataset")
         
         logger.info(f"Testing {len(dataset)} prompts on models: {models}")
         
-        # Run batch testing
         results_df = self.llm_executor.run_batch_test(dataset, models)
         
         if results_df.empty:
             logger.warning("No results generated")
             return {'results': pd.DataFrame(), 'metrics': {}}
         
-        # Evaluate safety
         evaluated_results = self.safety_evaluator.evaluate_responses(results_df)
         metrics = self.safety_evaluator.calculate_jailbreak_metrics(evaluated_results)
         
-        # Save results by format
         self._save_results_by_format(evaluated_results, dataset_name)
         
-        # Generate summary report
         self._generate_summary_report(metrics, dataset_name, models[0])
         
         return {
@@ -101,7 +95,6 @@ class MultiFormatTester:
         report_dir = os.path.join(self.output_dir, 'summary_reports')
         os.makedirs(report_dir, exist_ok=True)
         
-        # Convert metrics to serializable format
         serializable_metrics = self._convert_metrics_to_serializable(metrics)
         
         report = {
@@ -120,7 +113,6 @@ class MultiFormatTester:
         
         logger.info(f"Saved summary report to: {filename}")
         
-        # print summary to console
         self._print_console_summary(serializable_metrics, dataset)
         
         return report
@@ -147,3 +139,10 @@ class MultiFormatTester:
             if key.startswith('model_') and 'ranking' not in key:
                 model_name = key.replace('model_', '')
                 print(f"  {model_name}: {value['jailbreak_success_rate']}%")
+
+
+
+                
+                
+                
+print("")
