@@ -46,6 +46,7 @@ image = (modal.Image.debian_slim(python_version="3.12")
 app = modal.App("robostai-arabic-llm")
 @app.function(
     image=image,
+    # gpu = "t4", 
     gpu="A100-40GB",# for 7B models 
     # gpu="A100-80GB", # for 13B models  
     timeout=1800,
@@ -66,7 +67,7 @@ def evaluate(*arglist):
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", type=str, choices=['harmful', 'regional'], required=True)
     parser.add_argument("--models", type=str, nargs='+', default=['gemini', 'jais', 'acegpt', 'allam'])
-    parser.add_argument("--sample_size", type=int, default=5)
+    parser.add_argument("--sample_size", type=int, default=2)
     args = parser.parse_args(args=arglist)
     
     print("=" * 60)
