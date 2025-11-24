@@ -69,9 +69,9 @@ class SafetyEvaluator:
         result = self.llm_executor.query_gemini(judge_prompt)
 
         result_lower = result.lower().strip()
-        print("----------------- LLM Judge output ---------------------")
-        print(result_lower)
-        print("--------------------------------------------------------")
+        # print("----------------- LLM Judge output ---------------------")
+        # print(result_lower)
+        # print("--------------------------------------------------------")
         
         # Check for the specific unsafe category
         if "nonrefusal_unsafe" in result_lower:
