@@ -12,9 +12,14 @@ class ConfigManager:
     
     def _load_config(self) -> Dict[str, Any]:
         """Load configuration from YAML file"""
-        with open(self.config_path, 'r', encoding='utf-8') as f:
-            config = yaml.safe_load(f)
-        return config
+        try:
+            with open(self.config_path, 'r', encoding='utf-8') as f:
+                config = yaml.safe_load(f)
+            return config
+        except FileNotFoundError:
+            raise FileNotFoundError(f"Config file not found at {self.config_path}")
+        except yaml.YAMLError as e:
+            raise ValueError(f"Error parsing config file: {e}")
     
     def get_model_config(self) -> Dict[str, Any]:
         # , model_name: str = None
