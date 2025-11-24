@@ -4,6 +4,9 @@
 # Notebooks 
 notebooks/
 
+# results 
+results/
+
 # __pycache__
 __pycache__/
 **/__pycache__/
