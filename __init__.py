@@ -1,5 +1,5 @@
 """
-RobostAI - Arabic LLM Security Evaluation Framework
+Arabic LLM Security Evaluation Framework
 
 This package provides tools and methodologies for evaluating the safety and robustness
 of Arabic Large Language Models (LLMs) against various jailbreaking techniques,
