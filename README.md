@@ -1,4 +1,4 @@
-# ROBOSTAI - Arabic LLM Security Evaluation
+# Arabic LLM Security Evaluation
 
 ## Purpose
 This repository provides a comprehensive framework for evaluating the safety and robustness of Arabic Large Language Models (LLMs). It specifically targets "jailbreaking" vulnerabilities—attempts to bypass model safety filters—using various linguistic formats common in Arabic communication.
